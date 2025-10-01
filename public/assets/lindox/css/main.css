@@ -1,0 +1,136 @@
+*, 
+body,
+input,
+div,
+label,
+.form-control {
+   	font-family: "Poppins", sans-serif;
+	font-weight: 400;
+}
+
+.fn-inter {
+	 font-family: "Poppins", sans-serif;
+}
+
+.form-control::placeholder {
+    font-family: "Poppins", sans-serif;
+  	text-transform: capitalize;
+	font-weight: 400;
+}
+
+h5.card-title {
+  font-size: 16px;
+  font-weight: 300;
+}
+
+label {
+  font-size: 12px;
+  font-weight: 300;
+}
+
+img.img-border {
+  border: 1px solid #ddd;
+  padding: 2px;
+}
+
+img.question-img {
+  max-width: 400px;
+  max-height: 600px;
+}
+
+img.answer-img {
+  max-height: 140px;
+}
+
+button.width-btn {
+  width: 130px;
+  font-size: 11px;
+}
+
+button.width-btn-1 {
+  width: 150px;
+  font-size: 11px;
+}
+
+.width-badge {
+  width: 80px;
+  font-size: 10px;
+}
+
+.width-badge-1 {
+  width: 100px;
+  font-size: 10px;
+}
+
+.width-badge-2 {
+  width: 110px;
+  font-size: 10px;
+}
+
+.tb-pd {
+  padding-left: 0;
+  padding-right: 0;
+  padding-bottom: 0;
+}
+
+.question-pos {
+  margin-right: 0;
+  margin-bottom: 50px;
+}
+
+.finish {
+  margin-top: 50px;
+}
+
+ol.opsi:before {
+  list-style-type: upper-alpha;
+  font-size: 20px;
+  vertical-align: middle;
+  line-height: 20px;
+}
+
+.action-question-button {
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.pos-title-rekap,
+.pos-btn-rekap {
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+@media (min-width: 1199.98px) {
+  .datatable-scroll-lg {
+    width: 100%;
+    overflow-x: scroll;
+  }
+  /* .datatable-scroll-lg th,
+  .datatable-scroll-lg td {
+    white-space: nowrap;
+  } */
+}
+
+@media (min-width: 576px) {
+  .tb-pd {
+    padding-left: 80px;
+    padding-right: 80px;
+    padding-bottom: 80px;
+  }
+
+  .question-pos {
+    margin-right: 50px;
+    margin-bottom: 50px;
+  }
+
+  .finish {
+    margin-top: 0;
+  }
+  .pos-title-rekap {
+    text-align: left;
+  }
+
+  .pos-btn-rekap {
+    text-align: right;
+  }
+}
