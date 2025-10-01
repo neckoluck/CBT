@@ -1,63 +1,55 @@
-# CodeIgniter 4 Application Starter
+Computer-Based Testing (CBT) System for Polytechnic Admission
 
-## What is CodeIgniter?
+Description
+This project presents a web-based Computer-Based Testing (CBT) system designed to support admission examinations at State Polytechnics in Indonesia (c.q. State Polytechnic of Kupang).
+The system adopts a modular three-layered architecture (frontend, backend, database) optimized for scalability, reliability, and user experience.
+The platform integrates role-based access for Examinees, Proctors, and Administrators, streamlining the entire examination workflow from question management and session control to real-time answer submission and result reporting.
 
-CodeIgniter is a PHP full-stack web framework that is light, fast, flexible and secure.
-More information can be found at the [official site](http://codeigniter.com).
+Key Features
+Examinee
+- Secure login using registration token
+- Randomized question order (Computerized Fixed Test model)
+- Interactive answer submission and immediate scoring
+- Instant access to individual results
+Proctor
+- Session and room monitoring dashboard (25–30 examinees per session)
+- Attendance tracking and incident logging
+- Session reporting and anomaly detection
+Administrator
+- Question bank management with multimedia support (text, images, formulas)
+- Room and session configuration
+- Proctor assignment
+- Comprehensive results management and analytics
 
-This repository holds a composer-installable app starter.
-It has been built from the
-[development repository](https://github.com/codeigniter4/CodeIgniter4).
+Architecture
+- Frontend: HTML5, CSS3, JavaScript (Bootstrap)
+- Backend: PHP (CodeIgniter MVC framework)
+- Database: MySQL/MariaDB (relational schema for examinees, test items, sessions, administration)
+- Webserver: Apache HTTP Server
 
-More information about the plans for version 4 can be found in [the announcement](http://forum.codeigniter.com/thread-62615.html) on the forums.
+Security & Integrity
+- Role-based access control
+- Randomized question sequencing (CFT model)
+- Data integrity measures to prevent manipulation
+- Audit logs for administrative and proctor actions
 
-The user guide corresponding to this version of the framework can be found
-[here](https://codeigniter4.github.io/userguide/).
+Future Enhancements
+- Adaptive testing mechanisms
+- Remote proctoring and integration with national educational data platforms
+- Enhanced reporting and analytics dashboards
 
-## Installation & updates
+Installation
+1. Install Apache, PHP (>=7.4), and MySQL/MariaDB.
+2. Clone or download this repository.
+3. Import the provided SQL schema into your MySQL/MariaDB server.
+4. Configure database connection settings in application/config/database.php.
+5. Start Apache and navigate to http://localhost/cbt in your browser.
 
-`composer create-project codeigniter4/appstarter` then `composer update` whenever
-there is a new release of the framework.
+License
+- Restricted Access (Proprietary): The code is not publicly available; access granted upon request under NDA.
 
-When updating, check the release notes to see if there are any changes you might need to apply
-to your `app` folder. The affected files can be copied or merged from
-`vendor/codeigniter4/framework/app`.
-
-## Setup
-
-Copy `env` to `.env` and tailor for your app, specifically the baseURL
-and any database settings.
-
-## Important Change with index.php
-
-`index.php` is no longer in the root of the project! It has been moved inside the *public* folder,
-for better security and separation of components.
-
-This means that you should configure your web server to "point" to your project's *public* folder, and
-not to the project root. A better practice would be to configure a virtual host to point there. A poor practice would be to point your web server to the project root and expect to enter *public/...*, as the rest of your logic and the
-framework are exposed.
-
-**Please** read the user guide for a better explanation of how CI4 works!
-
-## Repository Management
-
-We use Github issues, in our main repository, to track **BUGS** and to track approved **DEVELOPMENT** work packages.
-We use our [forum](http://forum.codeigniter.com) to provide SUPPORT and to discuss
-FEATURE REQUESTS.
-
-This repository is a "distribution" one, built by our release preparation script.
-Problems with it can be raised on our forum, or as issues in the main repository.
-
-## Server Requirements
-
-PHP version 7.3 or higher is required, with the following extensions installed:
-
-- [intl](http://php.net/manual/en/intl.requirements.php)
-- [libcurl](http://php.net/manual/en/curl.requirements.php) if you plan to use the HTTP\CURLRequest library
-
-Additionally, make sure that the following extensions are enabled in your PHP:
-
-- json (enabled by default - don't turn it off)
-- [mbstring](http://php.net/manual/en/mbstring.installation.php)
-- [mysqlnd](http://php.net/manual/en/mysqlnd.install.php)
-- xml (enabled by default - don't turn it off)
+Contact
+For access requests, support, or collaboration:
+Nicodemus Mardanus Setiohardjo
+State Polytechnic of Kupang, Indonesia
+Email: nicoluck81@gmail.com 
