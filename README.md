@@ -1,7 +1,7 @@
-Computer-Based Testing (CBT) System for Polytechnic Admission
+Computer-Based Testing (CBT) System for Polytechnic Student Admission
 
 Description
-This project presents a web-based Computer-Based Testing (CBT) system designed to support admission examinations at State Polytechnics in Indonesia (c.q. State Polytechnic of Kupang).
+This project presents a web-based Computer-Based Testing (CBT) system designed to support student admission examinations at State Polytechnics in Indonesia (c.q. State Polytechnic of Kupang).
 The system adopts a modular three-layered architecture (frontend, backend, database) optimized for scalability, reliability, and user experience.
 The platform integrates role-based access for Examinees, Proctors, and Administrators, streamlining the entire examination workflow from question management and session control to real-time answer submission and result reporting.
 
@@ -46,7 +46,7 @@ Installation
 5. Start Apache and navigate to http://localhost/cbt in your browser.
 
 License
-- Restricted Access (Proprietary): The code is not publicly available; access granted upon request under NDA.
+- Open Source (MIT License).
 
 Contact
 For access requests, support, or collaboration:
