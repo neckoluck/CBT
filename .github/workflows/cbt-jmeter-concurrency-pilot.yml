@@ -1,0 +1,226 @@
+name: CBT - JMeter Concurrency Pilot 5-10-25 (CI Only)
+
+# Run manually. No automatic heavy load on every push.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  concurrency-pilot:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 35
+
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: temporary_root_for_ci_only
+          MARIADB_DATABASE: cbt_ci
+          MARIADB_USER: cbt_ci
+          MARIADB_PASSWORD: temporary_password_for_ci_only
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mariadb-admin ping -h 127.0.0.1 -uroot -ptemporary_root_for_ci_only --silent"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+
+    steps:
+      - name: Get CBT source code
+        uses: actions/checkout@v5
+
+      - name: Prepare PHP runtime
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.0' # Adjust to composer.json requirements if different
+          extensions: intl, mbstring, mysqli, pdo_mysql, openssl
+          tools: composer:v2
+          coverage: none
+
+      - name: Show source layout for troubleshooting
+        run: |
+          echo "Repository root: $PWD"
+          echo "Top-level files:"
+          ls -la | sed -n '1,75p'
+          if [ -f spark ]; then
+            echo 'Detected CodeIgniter 4 spark entrypoint.'
+          elif [ -d application ] && [ -f index.php ]; then
+            echo 'Detected possible CodeIgniter 3 layout. This starter requires adaptation; php spark commands will not work.'
+          else
+            echo 'Project root/entrypoint not yet identified. Review directory structure.'
+          fi
+
+      - name: Verify repository structure
+        run: |
+          test -f spark || { echo 'Missing spark. Adjust working-directory to CodeIgniter project root.'; exit 1; }
+          test -f composer.json || { echo 'Missing composer.json. Verify CodeIgniter project root.'; exit 1; }
+
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Configure isolated CI database (not production)
+        run: |
+          # Replace with your repository-specific .env requirements if needed.
+          cat > .env <<'EOF'
+          CI_ENVIRONMENT = development
+          app.baseURL = 'http://127.0.0.1:8080/'
+          database.default.hostname = 127.0.0.1
+          database.default.database = cbt_ci
+          database.default.username = cbt_ci
+          database.default.password = temporary_password_for_ci_only
+          database.default.DBDriver = MySQLi
+          database.default.port = 3306
+          EOF
+          mkdir -p writable/logs writable/cache writable/session
+          chmod -R u+rwX writable
+
+      - name: Install MariaDB client for schema import
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y mariadb-client
+
+      - name: Import SANITIZED CBT schema and synthetic smoke seed
+        env:
+          MYSQL_PWD: temporary_password_for_ci_only
+        run: |
+          set -euo pipefail
+          test -f tests/ci/schema_only.sql
+          test -f tests/ci/seed_smoke.sql
+          mariadb -h 127.0.0.1 -P 3306 -u cbt_ci cbt_ci < tests/ci/schema_only.sql
+          mariadb -h 127.0.0.1 -P 3306 -u cbt_ci cbt_ci < tests/ci/seed_smoke.sql
+          echo 'Checking tb_komponen synthetic test record:'
+          mariadb -h 127.0.0.1 -P 3306 -u cbt_ci -N -e 'SELECT COUNT(*) FROM cbt_ci.tb_komponen;'
+          echo 'Checking table/view counts:'
+          mariadb -h 127.0.0.1 -P 3306 -u cbt_ci -N -e             "SELECT TABLE_TYPE, COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='cbt_ci' GROUP BY TABLE_TYPE;"
+
+      - name: Seed synthetic participant and exam session (CI only)
+        env:
+          MYSQL_PWD: temporary_password_for_ci_only
+        run: |
+          set -euo pipefail
+          mariadb -h 127.0.0.1 -P 3306 -u cbt_ci cbt_ci < tests/ci/seed_login.sql
+          match=$(mariadb -h 127.0.0.1 -P 3306 -u cbt_ci cbt_ci -N -e \
+            "SELECT COUNT(*) FROM vw_peserta WHERE no_pendaftaran='9000000001' AND status_sess=0;")
+          echo "Synthetic participant view records: $match"
+          test "$match" = '1'
+
+      - name: Seed synthetic exam question and assigned staff (CI only)
+        env:
+          MYSQL_PWD: temporary_password_for_ci_only
+        run: |
+          set -euo pipefail
+          mariadb -h 127.0.0.1 -P 3306 -u cbt_ci cbt_ci < tests/ci/seed_question.sql
+          question_count=$(mariadb -h 127.0.0.1 -P 3306 -u cbt_ci cbt_ci -N -e \
+            "SELECT COUNT(*) FROM vw_soal WHERE id_soal=1;")
+          room_count=$(mariadb -h 127.0.0.1 -P 3306 -u cbt_ci cbt_ci -N -e \
+            "SELECT COUNT(*) FROM vw_ruangan_sesi WHERE id_ruangan_sesi=1;")
+          echo "Synthetic question rows: $question_count; active room view rows: $room_count"
+          test "$question_count" = '1'
+          test "$room_count" = '1'
+
+      - name: Create additional isolated synthetic CI participants
+        env:
+          MYSQL_PWD: temporary_password_for_ci_only
+        run: |
+          set -euo pipefail
+          python3 tests/ci/generate_pilot_users.py 25 > "$RUNNER_TEMP/ci-pilot-users.sql"
+          mariadb -h 127.0.0.1 -P 3306 -u cbt_ci cbt_ci < "$RUNNER_TEMP/ci-pilot-users.sql"
+          user_count=$(mariadb -h 127.0.0.1 -P 3306 -u cbt_ci cbt_ci -N -e \
+            "SELECT COUNT(*) FROM vw_peserta WHERE no_pendaftaran LIKE '9%' AND status_sess=0;")
+          echo "Synthetic participant count: $user_count"
+          test "$user_count" = '25'
+
+      - name: Start CBT test instance on localhost
+        run: |
+          nohup env PHP_CLI_SERVER_WORKERS=4 HTTP_HOST=127.0.0.1:8080 php spark serve --host 127.0.0.1 --port 8080 > "$RUNNER_TEMP/cbt-server.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/cbt-server.pid"
+          for i in $(seq 1 40); do
+            if curl --silent --output /dev/null --max-time 3 http://127.0.0.1:8080/; then
+              echo 'CBT HTTP server responding'; exit 0
+            fi
+            sleep 2
+          done
+          cat "$RUNNER_TEMP/cbt-server.log"
+          exit 1
+
+      - name: Install Apache JMeter 5.6.3
+        run: |
+          curl --fail --location --retry 3 \
+            'https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-5.6.3.tgz' \
+            --output "$RUNNER_TEMP/jmeter.tgz"
+          tar -xzf "$RUNNER_TEMP/jmeter.tgz" -C "$RUNNER_TEMP"
+          "$RUNNER_TEMP/apache-jmeter-5.6.3/bin/jmeter" -v
+
+      - name: Preflight auth endpoint before JMeter
+        run: |
+          echo 'Checking HTTP status from GET /auth:'
+          code=$(curl -sS --max-time 10 -o "$RUNNER_TEMP/cbt-auth.html" -w '%{http_code}' 'http://127.0.0.1:8080/auth')
+          echo "HTTP status: $code"
+          test "$code" = '200' || { echo 'Application endpoint failed; inspect app-logs in artifact.'; exit 1; }
+
+      - name: Run three isolated one-pass concurrency pilot scenarios
+        env:
+          MYSQL_PWD: temporary_password_for_ci_only
+        run: |
+          set -euo pipefail
+          mkdir -p jmeter-results
+          echo 'users,samples,errors,mean_ms,p95_ms,observed_requests_per_sec,persisted_answer_count' > jmeter-results/pilot-summary.csv
+          for users in 5 10 25; do
+            echo "Scenario: $users synthetic users, one pass each, 1 s ramp-up"
+            mariadb -h 127.0.0.1 -P 3306 -u cbt_ci cbt_ci -e \
+              "DELETE FROM tb_jawaban; UPDATE tb_peserta SET ip_kom=NULL,mulai_ujian=NULL,selesai_ujian=NULL,sisa_waktu=0,status_peserta=4,status_sess=0 WHERE id_peserta BETWEEN 1 AND 25;"
+            "$RUNNER_TEMP/apache-jmeter-5.6.3/bin/jmeter" -n \
+              -t tests/jmeter/concurrency-pilot.jmx \
+              -Jhost=127.0.0.1 -Jport=8080 -Jusers="$users" -Jrampup=1 \
+              -l "jmeter-results/pilot-${users}.jtl" \
+              -j "jmeter-results/pilot-${users}.log"
+            python3 tests/ci/verify_pilot.py "jmeter-results/pilot-${users}.jtl" "$users" > "jmeter-results/verify-${users}.txt"
+            cat "jmeter-results/verify-${users}.txt"
+            persisted=$(mariadb -h 127.0.0.1 -P 3306 -u cbt_ci cbt_ci -N -e \
+              "SELECT COUNT(*) FROM tb_jawaban WHERE id_peserta BETWEEN 1 AND ${users} AND jawaban=4;")
+            login_count=$(mariadb -h 127.0.0.1 -P 3306 -u cbt_ci cbt_ci -N -e \
+              "SELECT COUNT(*) FROM tb_peserta WHERE id_peserta BETWEEN 1 AND ${users} AND status_sess=1;")
+            echo "Persisted answer option 4: $persisted; logged-in participants: $login_count"
+            test "$persisted" = "$users" || { echo 'Not every participant saved answer 4'; exit 1; }
+            test "$login_count" = "$users" || { echo 'Not every participant authenticated'; exit 1; }
+            python3 tests/ci/summary_pilot.py "jmeter-results/pilot-${users}.jtl" "$users" "$persisted" >> jmeter-results/pilot-summary.csv
+          done
+
+      - name: Record runner configuration
+        if: always()
+        run: |
+          mkdir -p jmeter-results
+          {
+            echo 'Scope: 5/10/25 short CI concurrency pilot, one pass/user, NOT sustained load test'
+            echo 'CBT server: PHP 8.0 development server, PHP_CLI_SERVER_WORKERS=4, not Apache production'
+            echo 'JMeter 5.6.3, MariaDB 11.4'
+            echo 'Ramp-up 1 second per scenario, 200 ms timer per HTTP sampler'
+            echo '5 HTTP requests per synthetic participant (GET auth, POST login, GET question, POST answer, GET question)'
+            echo 'No results generation scenario; no AES-256-GCM/RSA-2048 comparison'
+            echo "Repository commit: $GITHUB_SHA"
+            echo "GitHub Actions run: $GITHUB_RUN_ID"
+            php -v | head -1
+            nproc
+          } > jmeter-results/pilot-environment.txt
+
+      - name: Copy application logs
+        if: always()
+        run: |
+          mkdir -p jmeter-results
+          if [ -f "$RUNNER_TEMP/cbt-server.log" ]; then
+            cp "$RUNNER_TEMP/cbt-server.log" jmeter-results/cbt-server.log
+          fi
+          if [ -d writable/logs ]; then
+            cp -r writable/logs jmeter-results/app-logs || true
+          fi
+
+      - name: Upload pilot results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: cbt-jmeter-concurrency-pilot-results
+          path: jmeter-results/
+          if-no-files-found: warn
