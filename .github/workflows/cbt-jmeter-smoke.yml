@@ -40,6 +40,19 @@ jobs:
           tools: composer:v2
           coverage: none
 
+      - name: Show source layout for troubleshooting
+        run: |
+          echo "Repository root: $PWD"
+          echo "Top-level files:"
+          ls -la | sed -n '1,75p'
+          if [ -f spark ]; then
+            echo 'Detected CodeIgniter 4 spark entrypoint.'
+          elif [ -d application ] && [ -f index.php ]; then
+            echo 'Detected possible CodeIgniter 3 layout. This starter requires adaptation; php spark commands will not work.'
+          else
+            echo 'Project root/entrypoint not yet identified. Review directory structure.'
+          fi
+
       - name: Verify repository structure
         run: |
           test -f spark || { echo 'Missing spark. Adjust working-directory to CodeIgniter project root.'; exit 1; }
@@ -129,7 +142,7 @@ jobs:
             cp -r writable/logs jmeter-results/app-logs || true
           fi
 
-      - name:  JMeter output
+      - name: Upload JMeter output
         if: always()
         uses: actions/upload-artifact@v6
         with:
