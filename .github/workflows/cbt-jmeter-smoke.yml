@@ -1,0 +1,139 @@
+name: CBT - JMeter Smoke Test (GitHub Runner)
+
+# Run manually. No automatic heavy load on every push.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: temporary_root_for_ci_only
+          MARIADB_DATABASE: cbt_ci
+          MARIADB_USER: cbt_ci
+          MARIADB_PASSWORD: temporary_password_for_ci_only
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mariadb-admin ping -h 127.0.0.1 -uroot -ptemporary_root_for_ci_only --silent"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+
+    steps:
+      - name: Get CBT source code
+        uses: actions/checkout@v4
+
+      - name: Prepare PHP runtime
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.0' # Adjust to composer.json requirements if different
+          extensions: intl, mbstring, mysqli, pdo_mysql, openssl
+          tools: composer:v2
+          coverage: none
+
+      - name: Verify repository structure
+        run: |
+          test -f spark || { echo 'Missing spark. Adjust working-directory to CodeIgniter project root.'; exit 1; }
+          test -f composer.json || { echo 'Missing composer.json. Verify CodeIgniter project root.'; exit 1; }
+
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Configure isolated CI database (not production)
+        run: |
+          # Replace with your repository-specific .env requirements if needed.
+          cat > .env <<'EOF'
+          CI_ENVIRONMENT = testing
+          app.baseURL = 'http://127.0.0.1:8080/'
+          database.default.hostname = 127.0.0.1
+          database.default.database = cbt_ci
+          database.default.username = cbt_ci
+          database.default.password = temporary_password_for_ci_only
+          database.default.DBDriver = MySQLi
+          database.default.port = 3306
+          EOF
+          mkdir -p writable/logs writable/cache writable/session
+          chmod -R u+rwX writable
+
+      - name: Initialize schema and optional TEST-ONLY dataset
+        run: |
+          # Existing projects may use SQL imports instead of CI4 migrations.
+          # If migrations fail, adjust this to your actual repository/database schema.
+          php spark migrate --all
+          if [ -f app/Database/Seeds/CbtJMeterSeeder.php ]; then
+            php spark db:seed CbtJMeterSeeder
+          else
+            echo 'No CbtJMeterSeeder found. Add synthetic test users/questions before authenticated load tests.'
+          fi
+
+      - name: Start CBT test instance on localhost
+        run: |
+          nohup php spark serve --host 127.0.0.1 --port 8080 > "$RUNNER_TEMP/cbt-server.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/cbt-server.pid"
+          for i in $(seq 1 40); do
+            if curl --silent --output /dev/null --max-time 3 http://127.0.0.1:8080/; then
+              echo 'CBT HTTP server responding'; exit 0
+            fi
+            sleep 2
+          done
+          cat "$RUNNER_TEMP/cbt-server.log"
+          exit 1
+
+      - name: Install Apache JMeter 5.6.3
+        run: |
+          curl --fail --location --retry 3 \
+            'https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-5.6.3.tgz' \
+            --output "$RUNNER_TEMP/jmeter.tgz"
+          tar -xzf "$RUNNER_TEMP/jmeter.tgz" -C "$RUNNER_TEMP"
+          "$RUNNER_TEMP/apache-jmeter-5.6.3/bin/jmeter" -v
+
+      - name: Run smoke test (1 user, 2 GET requests)
+        run: |
+          mkdir -p jmeter-results
+          "$RUNNER_TEMP/apache-jmeter-5.6.3/bin/jmeter" -n \
+            -t tests/jmeter/smoke.jmx \
+            -Jhost=127.0.0.1 -Jport=8080 \
+            -l jmeter-results/smoke.jtl \
+            -j jmeter-results/jmeter.log \
+            -e -o jmeter-results/html
+
+      - name: Verify smoke test HTTP results
+        run: |
+          python3 - <<'PYTEST'
+          import csv, sys
+          with open('jmeter-results/smoke.jtl', encoding='utf-8') as f:
+              rows = list(csv.DictReader(f))
+          failures = [(r.get('responseCode'), r.get('responseMessage')) for r in rows if r.get('success', '').lower() != 'true']
+          print('Samples:', len(rows), 'HTTP failures:', failures)
+          if len(rows) != 2 or failures:
+              sys.exit('Smoke test did not produce two successful HTTP samples')
+          PYTEST
+
+      - name: Copy application server logs
+        if: always()
+        run: |
+          mkdir -p jmeter-results
+          if [ -f "$RUNNER_TEMP/cbt-server.log" ]; then
+            cp "$RUNNER_TEMP/cbt-server.log" jmeter-results/cbt-server.log
+          fi
+          if [ -d writable/logs ]; then
+            cp -r writable/logs jmeter-results/app-logs || true
+          fi
+
+      - name: Upload JMeter output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cbt-jmeter-smoke-results
+          path: jmeter-results/
+          if-no-files-found: warn
+          retention-days: 14
