@@ -30,7 +30,7 @@ jobs:
 
     steps:
       - name: Get CBT source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Prepare PHP runtime
         uses: shivammathur/setup-php@v2
@@ -129,9 +129,9 @@ jobs:
             cp -r writable/logs jmeter-results/app-logs || true
           fi
 
-      - name: Upload JMeter output
+      - name:  JMeter output
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: cbt-jmeter-smoke-results
           path: jmeter-results/
