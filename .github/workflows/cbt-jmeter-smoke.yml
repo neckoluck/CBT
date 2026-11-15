@@ -65,7 +65,7 @@ jobs:
         run: |
           # Replace with your repository-specific .env requirements if needed.
           cat > .env <<'EOF'
-          CI_ENVIRONMENT = testing
+          CI_ENVIRONMENT = development
           app.baseURL = 'http://127.0.0.1:8080/'
           database.default.hostname = 127.0.0.1
           database.default.database = cbt_ci
