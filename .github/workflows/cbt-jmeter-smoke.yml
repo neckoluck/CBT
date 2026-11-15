@@ -81,7 +81,10 @@ jobs:
         run: |
           # Existing projects may use SQL imports instead of CI4 migrations.
           # If migrations fail, adjust this to your actual repository/database schema.
-          php spark migrate --all
+          # CI4 v4.1.x may return 404 for Spark commands under CI_ENVIRONMENT=testing.
+          # HTTP_HOST is needed by this application's custom Constants.php in CLI mode.
+          HTTP_HOST=127.0.0.1:8080 php spark migrate --all
+          echo "Migration command completed; checking whether the application has SQL migrations or relies on dumps."
           if [ -f app/Database/Seeds/CbtJMeterSeeder.php ]; then
             php spark db:seed CbtJMeterSeeder
           else
@@ -90,7 +93,7 @@ jobs:
 
       - name: Start CBT test instance on localhost
         run: |
-          nohup php spark serve --host 127.0.0.1 --port 8080 > "$RUNNER_TEMP/cbt-server.log" 2>&1 &
+          nohup env HTTP_HOST=127.0.0.1:8080 php spark serve --host 127.0.0.1 --port 8080 > "$RUNNER_TEMP/cbt-server.log" 2>&1 &
           echo $! > "$RUNNER_TEMP/cbt-server.pid"
           for i in $(seq 1 40); do
             if curl --silent --output /dev/null --max-time 3 http://127.0.0.1:8080/; then
