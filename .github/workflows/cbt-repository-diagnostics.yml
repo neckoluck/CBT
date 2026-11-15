@@ -1,0 +1,57 @@
+name: CBT - Repository Diagnostics (No Load Test)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout CBT source
+        uses: actions/checkout@v5
+
+      - name: Detect application layout safely
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p diagnostics
+          {
+            echo '## Directory layout'
+            printf 'Commit: '; git rev-parse --short HEAD
+            printf 'Root files: \n'; find . -maxdepth 1 -mindepth 1 -printf '%f\n' | sort
+            echo
+            echo 'Relevant paths (up to three levels):'
+            find . -maxdepth 3 -type f \( -name 'spark' -o -name 'composer.json' -o -name 'index.php' -o -name '*.sql' -o -name 'Routes.php' -o -name 'database.php' -o -name '.env.example' \) -print | sort | head -100 || true
+            echo
+            if [ -f spark ]; then
+              echo 'Framework hint: CodeIgniter 4, root spark found'
+            elif [ -d application ] && [ -f index.php ]; then
+              echo 'Framework hint: legacy CodeIgniter layout, root index.php and application/ found'
+            else
+              echo 'Framework hint: root is not yet confirmed; inspect directories above'
+            fi
+            echo
+            echo 'PHP/composer files in root:'
+            ls -ld composer.json composer.lock spark public application app system vendor 2>/dev/null || true
+            echo
+            echo 'Available migrations and SQL files (names only):'
+            find . -maxdepth 4 -type f \( -iname '*migration*.php' -o -iname '*.sql' \) -print | sort | head -50 || true
+          } | tee diagnostics/layout.txt
+          {
+            echo '## CBT repository diagnostic'
+            echo 'Please inspect job artifacts for file names and framework identification.'
+            echo 'No application, database, or JMeter load test was run.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload diagnostic file list
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: cbt-repository-diagnostics
+          path: diagnostics/
+          if-no-files-found: warn
+          retention-days: 7
